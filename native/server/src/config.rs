@@ -185,7 +185,7 @@ pub async fn ensure_server_config(db: &Db) -> Result<String, fluxdown_engine::db
     eprintln!("  FluxDown Server — first run, management token generated:");
     eprintln!("    {token}");
     eprintln!("  Use this token to log in to the Web UI or call the");
-    eprintln!("  management API (Authorization: ******");
+    eprintln!("  management API (Authorization: Bearer <your-token>).");
     eprintln!("  The token is stored in the data directory (config table).");
     eprintln!("  To regenerate: delete the 'local_server_token' row from");
     eprintln!("  the config table and restart the server.");
