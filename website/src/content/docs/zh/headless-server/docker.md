@@ -3,7 +3,7 @@ title: Docker 与 NAS
 description: 用预编译 Docker 镜像运行 headless FluxDown 服务器，支持 Docker Compose、CasaOS/ZimaOS 与 Unraid。
 section: headless-server
 order: 2
-sourceHash: "3f6c18b715a3"
+sourceHash: "3279bbdab922"
 ---
 
 运行 headless 服务器最快的方式是使用预编译 Docker 镜像——无需 Cargo 构建，也无需单独构建 Web 界面。镜像内置了服务器二进制和 Web 界面，全部通过一个端口（`17800`）暴露，并把数据库、日志和访问 token 持久化到卷。
@@ -77,7 +77,64 @@ https://cdn.jsdelivr.net/gh/zerx-lab/casaos-appstore@gh-pages
 
 ## Unraid
 
-Unraid Community Applications 模板见 [zerx-lab/unraid-templates](https://github.com/zerx-lab/unraid-templates)。Web 界面地址为 `http://[服务器IP]:17800/`。
+此 fork 尚未上架 Unraid Community Applications（CA）插件。请通过 Unraid WebUI 的 **Docker** 标签页手动安装。
+
+### 第一步 — 添加容器
+
+1. 在 Unraid WebUI 中，点击 **Docker** 标签页。
+2. 点击 **Add Container**。
+3. 填写以下字段：
+
+| 字段 | 值 |
+|---|---|
+| **Name** | `fluxdown-server` |
+| **Repository** | `ghcr.io/docwatz/fluxdown-server:latest` |
+| **Network type** | `bridge` |
+
+### 第二步 — 配置端口与路径
+
+添加一个**端口**映射和两个**路径**映射：
+
+**端口：**
+
+| 容器端口 | 宿主端口 | 协议 |
+|---|---|---|
+| `17800` | `17800` | TCP |
+
+**路径：**
+
+| 容器路径 | 宿主路径 | 说明 |
+|---|---|---|
+| `/data` | `/mnt/user/appdata/fluxdown/data` | 数据库、日志和管理 token——请放在持久化路径。 |
+| `/root/Downloads` | `/mnt/user/downloads` | 默认下载目录，按需调整（Unraid 共享名区分大小写，如 `/mnt/user/downloads` 或 `/mnt/user/Downloads`）。 |
+
+### 第三步 — 应用并拉取镜像
+
+点击 **Apply**。Unraid 拉取镜像（`ghcr.io/docwatz/fluxdown-server:latest`）并启动容器，首次运行可能需要一分钟。
+
+### 第四步 — 获取管理 Token
+
+容器首次启动时会生成一次性管理 token 并打印到日志。在 Unraid 终端中获取：
+
+```bash
+docker logs fluxdown-server 2>&1 | grep -i token
+```
+
+**请复制并保存此 token**，它只打印一次。
+
+### 第五步 — 打开 Web 界面
+
+访问：
+
+```
+http://[服务器IP]:17800
+```
+
+在登录界面输入第四步获取的 token 即可进入。
+
+### 更新 FluxDown
+
+通过 **Docker** 标签页更新，方式与其他容器相同：点击容器行 → **Force Update**（或点击有更新时出现的更新箭头）。`/data` 卷与镜像分离，升级后任务、设置和 token 均保留。
 
 ## 安全地对外暴露
 
