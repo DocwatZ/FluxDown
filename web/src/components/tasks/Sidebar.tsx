@@ -12,6 +12,7 @@ import { clearCredentials, getBase } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 import { fileType, fmtSpeed, typeLabel, TYPE_ORDER, type FileType as FT } from '../../lib/format'
 import { useI18n } from '../../lib/i18n'
+import { getDialogRoot } from '../../lib/portal-container'
 import { connStore, disconnectWs, useGlobalSpeed, useStore } from '../../lib/ws'
 import { useUpdateCheck } from '../../lib/update'
 import { confirmDialog } from '../../lib/confirm'
@@ -185,7 +186,7 @@ export function Sidebar() {
       </div>
 
       <Dialog.Root open={logoutOpen} onOpenChange={setLogoutOpen}>
-        <Dialog.Portal>
+        <Dialog.Portal container={getDialogRoot()}>
           <Dialog.Overlay className="wbackdrop show" />
           <Dialog.Content className="dialog sm show">
             <header className="dlg-head">

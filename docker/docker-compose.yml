@@ -1,12 +1,20 @@
-# FluxDown Server 部署（Web UI + REST API + WebSocket 实时推送）
+# FluxDown Server — Docker Compose deployment
 #
-# 启动：docker compose up -d
-# 首次启动会生成管理 token 并打印到日志（唯一一次可见）：
+# Quick start:  docker compose up -d
+# View logs:    docker compose logs -f fluxdown-server
+#
+# First run: the management token is printed once to the log on startup:
 #   docker compose logs fluxdown-server 2>&1 | grep -i token
+# The token is also stored in the data volume (SQLite config table) and
+# survives restarts.  To regenerate it, delete the 'local_server_token' row
+# from the config table and restart.
+#
+# Unraid users: set PUID/PGID to match the owner of your appdata/downloads
+# shares (usually found in Settings -> Users on your Unraid server).
 services:
   fluxdown-server:
     image: ghcr.io/zerx-lab/fluxdown-server:latest
-    # 本地构建（替代 image 一行）：
+    # Local build (replace the image: line above):
     # build:
     #   context: ..
     #   dockerfile: docker/server.Dockerfile
@@ -15,12 +23,25 @@ services:
     ports:
       - "17800:17800"
     volumes:
-      - fluxdown-data:/data # DB / 日志 / 管理 token
-      - ./downloads:/root/Downloads # 默认下载目录（容器内 HOME=/root）
-    # environment:
-    #   FLUXDOWN_LANG: zh # Web 界面默认语言（en/zh）；用户手动改过语言后以手动选择为准
-    #   FLUXDOWN_DEMO: "1" # 演示模式：仅允许下载内置演示文件
-    #   FLUXDOWN_DATABASE_URL: postgres://user:pass@host:5432/fluxdown # 外部数据库
+      - fluxdown-data:/data       # SQLite DB, logs, and management token
+      - ./downloads:/downloads    # Default download directory (maps to FLUXDOWN_DOWNLOAD_DIR)
+    environment:
+      # ── User / permission mapping (important for Unraid and NAS) ──────────
+      PUID: "1000"   # Host UID that should own downloaded files and DB
+      PGID: "1000"   # Host GID that should own downloaded files and DB
+      # ── Download location ────────────────────────────────────────────────
+      FLUXDOWN_DOWNLOAD_DIR: "/downloads"  # Written as default_save_dir on first run
+      # ── Language (optional) ──────────────────────────────────────────────
+      # FLUXDOWN_LANG: "en"   # Force English UI (en / zh); per-browser choice overrides
+      # ── External database (optional, PostgreSQL) ─────────────────────────
+      # FLUXDOWN_DATABASE_URL: "******host:5432/fluxdown"
+      # ── Demo / restricted mode (optional) ───────────────────────────────
+      # FLUXDOWN_DEMO: "1"    # Restrict downloads to the built-in demo file
+    # healthcheck is defined in the Dockerfile; override timing here if needed:
+    # healthcheck:
+    #   interval: 30s
+    #   timeout: 5s
+    #   start_period: 15s
 
 volumes:
   fluxdown-data:

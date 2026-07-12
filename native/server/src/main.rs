@@ -70,13 +70,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(url) => Db::connect(url).await?,
         None => Db::open(&data_dir).await?,
     };
-    boot_db.init_default_config(&default_save_dir()).await?;
+    // FLUXDOWN_DOWNLOAD_DIR: seed the default save directory for Docker/Unraid deployments.
+    // init_default_config uses INSERT OR IGNORE, so this only takes effect on first run
+    // (the user's saved value is never overwritten).
+    let seed_save_dir = server_cfg
+        .download_dir
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(default_save_dir);
+    boot_db.init_default_config(&seed_save_dir).await?;
     let token = ensure_server_config(&boot_db).await?;
 
-    // FLUXDOWN_LANG 是部署级默认语言：不写库，仅作设置页未保存过语言时的
-    // 回退值（ServerApiHost::web_language 实时求值）——手动更改永远优先。
+    // FLUXDOWN_LANG is a deployment-level language fallback — not persisted to DB.
+    // Settings-page saved value always takes precedence (ServerApiHost::web_language
+    // resolves at request time).
     if let Some(lang) = &server_cfg.language {
         log_info!("[server] default web language (FLUXDOWN_LANG): {}", lang);
+    }
+    if let Some(dir) = &server_cfg.download_dir {
+        log_info!("[server] download dir seed (FLUXDOWN_DOWNLOAD_DIR): {}", dir);
     }
 
     let all_cfg = boot_db.get_all_config().await.unwrap_or_default();
@@ -190,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     if let Some(url) = &server_cfg.demo_url {
         log_info!("[server] demo mode enabled, allowed url: {}", url);
-        eprintln!("演示模式已开启：仅允许下载 {url}");
+        eprintln!("Demo mode enabled: only {url} can be downloaded");
     }
     let state = ServerState {
         db: db_handle,

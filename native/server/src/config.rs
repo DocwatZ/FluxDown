@@ -15,19 +15,27 @@ use std::path::PathBuf;
 use fluxdown_engine::db::Db;
 use fluxdown_engine::log_info;
 
-/// 服务器进程级配置（全部来自环境变量）。
+/// Server process configuration (sourced entirely from environment variables).
 pub struct ServerConfig {
     pub bind: String,
     pub data_dir_override: Option<PathBuf>,
     pub database_url: Option<String>,
     pub webroot: PathBuf,
-    /// 演示模式：`Some(url)` 时新任务仅允许下载该 URL（见 `host::demo_guard`）。
+    /// Demo mode: when `Some(url)`, new tasks may only download that URL
+    /// (enforced by `host::demo_guard`).
     pub demo_url: Option<String>,
-    /// Web UI 默认语言（`en`/`zh`）。纯回退值，不写库：`/ping` 的 `language`
-    /// 实时求值时，设置页保存的 `web_language` 优先、缺省才用本值——
-    /// 用户手动更改永远优先且跨重启保留；浏览器端显式选过语言的用户
-    /// 则始终以本人选择为准。
+    /// Web UI default language (`en`/`zh`).  Pure fallback value — not written
+    /// to the database.  The `/ping` `language` field resolves at request time:
+    /// the settings-page-saved `web_language` takes precedence; this value is
+    /// only used when no per-browser preference exists.  Users who explicitly
+    /// change language always keep their choice across restarts.
     pub language: Option<String>,
+    /// Override for the default download save directory (`FLUXDOWN_DOWNLOAD_DIR`).
+    /// Written to the `default_save_dir` config key on first run (via
+    /// `init_default_config`); has no effect once a value has been persisted.
+    /// Useful for Docker/Unraid deployments where the download share is mounted
+    /// at a well-known path (e.g. `/downloads`).
+    pub download_dir: Option<String>,
 }
 
 impl ServerConfig {
@@ -49,12 +57,15 @@ impl ServerConfig {
             Ok(raw) => {
                 let lang = parse_lang(&raw);
                 if lang.is_none() && !raw.trim().is_empty() {
-                    eprintln!("FLUXDOWN_LANG 无法识别（支持 en / zh），已忽略：{raw}");
+                    eprintln!("FLUXDOWN_LANG value not recognised (supported: en / zh), ignoring: {raw}");
                 }
                 lang
             }
             Err(_) => None,
         };
+        let download_dir = std::env::var("FLUXDOWN_DOWNLOAD_DIR")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         Self {
             bind,
             data_dir_override,
@@ -62,6 +73,7 @@ impl ServerConfig {
             webroot,
             demo_url,
             language,
+            download_dir,
         }
     }
 }
@@ -170,9 +182,13 @@ pub async fn ensure_server_config(db: &Db) -> Result<String, fluxdown_engine::db
     db.set_config("local_server_token", &token).await?;
     log_info!("[server] generated management token: {}", token);
     eprintln!("==============================================================");
-    eprintln!("  FluxDown Server 首次运行，已生成管理 token：");
+    eprintln!("  FluxDown Server — first run, management token generated:");
     eprintln!("    {token}");
-    eprintln!("  用它登录 Web 界面 / 调用管理 API（Authorization: Bearer）。");
+    eprintln!("  Use this token to log in to the Web UI or call the");
+    eprintln!("  management API (Authorization: Bearer YOUR_TOKEN).");
+    eprintln!("  The token is stored in the data directory (config table).");
+    eprintln!("  To regenerate: delete the 'local_server_token' row from");
+    eprintln!("  the config table and restart the server.");
     eprintln!("==============================================================");
     Ok(token)
 }

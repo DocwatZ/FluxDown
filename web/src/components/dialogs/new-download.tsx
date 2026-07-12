@@ -11,6 +11,7 @@ import { api } from '../../lib/api'
 import { cn } from '../../lib/cn'
 import { newDownloadOpenStore } from '../../lib/dialogs'
 import { useI18n } from '../../lib/i18n'
+import { getDialogRoot } from '../../lib/portal-container'
 import { useStore } from '../../lib/ws'
 import { FsPicker } from './fs-picker'
 
@@ -248,7 +249,7 @@ export function NewDownloadDialog() {
         if (!o) close()
       }}
     >
-      <Dialog.Portal>
+      <Dialog.Portal container={getDialogRoot()}>
         <Dialog.Overlay className="wbackdrop show" />
         <Dialog.Content
           asChild

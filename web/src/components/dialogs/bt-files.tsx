@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { fileType, fmtBytes, type FileType } from '../../lib/format'
 import { useI18n } from '../../lib/i18n'
+import { getDialogRoot } from '../../lib/portal-container'
 import { btRequestStore, sendWs, useStore } from '../../lib/ws'
 
 const FILE_ICONS: Record<FileType, LucideIcon> = {
@@ -75,7 +76,7 @@ export function BtFilesDialog() {
         if (!o) cancel()
       }}
     >
-      <Dialog.Portal>
+      <Dialog.Portal container={getDialogRoot()}>
         <Dialog.Overlay className="wbackdrop show" />
         <Dialog.Content className="dialog show">
           <header className="dlg-head">

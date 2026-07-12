@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Folder, FolderOpen, FolderX, X } from 'lucid
 import { api } from '../../lib/api'
 import { cn } from '../../lib/cn'
 import { useI18n } from '../../lib/i18n'
+import { getDialogRoot } from '../../lib/portal-container'
 
 interface FsPickerProps {
   value: string
@@ -82,7 +83,7 @@ export function FsPicker({ value, onChange }: FsPickerProps) {
           {t('fs.browse')}
         </button>
       </Dialog.Trigger>
-      <Dialog.Portal>
+      <Dialog.Portal container={getDialogRoot()}>
         <Dialog.Overlay className="wbackdrop fs-backdrop show" />
         <Dialog.Content className="dialog fs-dialog show">
           <header className="dlg-head">

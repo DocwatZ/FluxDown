@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -8,6 +8,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Stable portal container: all Radix UI Dialog portals render here instead
+         of directly into document.body, preventing the "removeChild: node is not
+         a child" race in React 19 concurrent mode when multiple portals open/close
+         simultaneously (e.g. NewDownload closing and BtFilesDialog opening). -->
+    <div id="dialog-root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
