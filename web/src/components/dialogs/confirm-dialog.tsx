@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { AlertTriangle, Info } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { confirmStore } from '../../lib/confirm'
+import { getDialogRoot } from '../../lib/portal-container'
 import { useStore } from '../../lib/ws'
 
 export function ConfirmDialog() {
@@ -27,7 +28,7 @@ export function ConfirmDialog() {
         if (!o) close(false)
       }}
     >
-      <Dialog.Portal>
+      <Dialog.Portal container={getDialogRoot()}>
         <Dialog.Overlay className="wbackdrop show" />
         <Dialog.Content className="dialog confirm-dlg show">
           <div className="dlg-body">

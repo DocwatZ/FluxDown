@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { useI18n } from '../../lib/i18n'
+import { getDialogRoot } from '../../lib/portal-container'
 import { hlsRequestStore, sendWs, useStore } from '../../lib/ws'
 
 export function HlsQualityDialog() {
@@ -41,7 +42,7 @@ export function HlsQualityDialog() {
         if (!o) cancel()
       }}
     >
-      <Dialog.Portal>
+      <Dialog.Portal container={getDialogRoot()}>
         <Dialog.Overlay className="wbackdrop show" />
         <Dialog.Content className="dialog sm show">
           <header className="dlg-head">
