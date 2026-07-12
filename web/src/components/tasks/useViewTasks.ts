@@ -29,6 +29,9 @@ export function useViewTasks(): ViewTask[] {
           speed: l.speed,
         }
       }),
+    // `tasks` is derived directly from `data` (same reference identity when
+    // the query result hasn't changed), so listing `data` as the dep is
+    // sufficient and avoids a redundant dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, live],
   )

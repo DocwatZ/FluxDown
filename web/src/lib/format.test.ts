@@ -1,21 +1,8 @@
 // 单元测试：format.ts 核心格式化函数
 // 运行：bun test web/src/lib/format.test.ts
+// (localStorage polyfill is provided by bunfig.toml → src/test-setup.ts)
 
-import { describe, it, expect, beforeAll } from 'bun:test'
-
-// i18n module runs localStorage.getItem at module initialisation.
-// Provide a minimal DOM stub so the module can be imported in a Node-like env.
-beforeAll(() => {
-  if (typeof globalThis.localStorage === 'undefined') {
-    // @ts-expect-error intentional minimal stub
-    globalThis.localStorage = {
-      getItem: () => null,
-      setItem: () => {},
-      removeItem: () => {},
-    }
-  }
-})
-
+import { describe, it, expect } from 'bun:test'
 import { fmtBytes, fmtSpeed, fmtEta } from './format'
 
 // ---------------------------------------------------------------------------

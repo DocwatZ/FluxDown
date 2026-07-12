@@ -7,6 +7,8 @@ use std::path::Path;
 
 use fluxdown_engine::log_info;
 
+use crate::config::mask_token;
+
 /// 打印结构化启动横幅。
 ///
 /// - `version` — 服务器版本字符串
@@ -36,11 +38,7 @@ pub fn print_startup_banner(
     let (disk_free, disk_total) = disk_stats(save_dir);
 
     // Mask token: show first 8 chars + ellipsis.
-    let token_display = if token.len() > 8 {
-        format!("{}…", &token[..8])
-    } else {
-        token.to_string()
-    };
+    let token_display = mask_token(token);
 
     // --- print to stderr -------------------------------------------------
 

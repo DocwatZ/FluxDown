@@ -663,10 +663,16 @@ async fn health(State(state): State<ServerState>) -> Result<Response, ApiError> 
     // Fast path: return cached result if within TTL.
     {
         let cache = state.health_cache.read().await;
-        if let Some((ref report, ts)) = *cache
+        let maybe_report = if let Some((ref report, ts)) = *cache
             && ts.elapsed() < TTL
         {
-            return Ok(axum::Json(report.clone()).into_response());
+            Some(report.clone())
+        } else {
+            None
+        };
+        drop(cache);
+        if let Some(report) = maybe_report {
+            return Ok(axum::Json(report).into_response());
         }
     }
 
@@ -713,7 +719,11 @@ async fn health(State(state): State<ServerState>) -> Result<Response, ApiError> 
         checked_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
-            .unwrap_or(0),
+            .unwrap_or_else(|e| {
+                // System clock is set before the Unix epoch — extremely unlikely.
+                // Fall back to the negative elapsed seconds to surface the anomaly.
+                -(e.duration().as_secs() as i64)
+            }),
     };
 
     // Update cache.

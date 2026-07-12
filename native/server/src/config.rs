@@ -202,8 +202,7 @@ pub async fn ensure_server_config(
         (format!("fxd_{}", uuid::Uuid::new_v4().simple()), false)
     };
     db.set_config("local_server_token", &token).await?;
-    // Log only first 8 chars to avoid the full token appearing in log files.
-    let masked = format!("{}…", &token[..token.len().min(8)]);
+    let masked = mask_token(&token);
     if is_seeded {
         log_info!("[server] management token set from FLUXDOWN_TOKEN env var ({})", masked);
         eprintln!("==============================================================");
@@ -223,6 +222,13 @@ pub async fn ensure_server_config(
         eprintln!("==============================================================");
     }
     Ok(token)
+}
+
+/// Returns the first 8 characters of `token` followed by `…`.
+///
+/// Used to print a masked preview to logs and stderr without leaking the full token.
+pub fn mask_token(token: &str) -> String {
+    format!("{}…", &token[..token.len().min(8)])
 }
 
 #[cfg(test)]

@@ -226,6 +226,7 @@ export const TaskRow = memo(function TaskRow({ task: t, queues }: { task: ViewTa
     prev.task.speed === next.task.speed &&
     prev.task.errorMessage === next.task.errorMessage &&
     prev.task.fileName === next.task.fileName &&
+    prev.task.url === next.task.url &&
     prev.queues === next.queues
   )
 })
