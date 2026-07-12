@@ -99,7 +99,7 @@ The template fields you'll most likely want to adjust before clicking **Apply**:
 |---|---|---|
 | **WebUI Port** | `17800` | Keep as-is, or change if `17800` is already in use on your server. |
 | **Data directory** (AppData path) | `/mnt/user/appdata/fluxdown/data` | Keep as-is, or point to your preferred AppData share. This folder holds the database, logs, and the generated admin token — keep it on a persistent path. |
-| **Downloads directory** | `/mnt/user/downloads` | Point to whatever share you want finished files to land in (e.g. `/mnt/user/Downloads`). |
+| **Downloads directory** | `/mnt/user/downloads` | Point to whatever share you want finished files to land in. Unraid share names are case-sensitive — use the exact name of your share (e.g. `/mnt/user/downloads` or `/mnt/user/Downloads` depending on how you named it). |
 | **Timezone (`TZ`)** | `Etc/UTC` | Set to your local timezone (e.g. `America/New_York`, `Europe/London`, `Asia/Shanghai`). |
 
 All other fields can stay at their defaults for a first install.
@@ -130,7 +130,9 @@ The very first time the container starts, it generates a one-time admin token an
    docker logs fluxdown-server 2>&1 | grep -i token
    ```
 
-4. **Copy and save this token.** It is only printed once. If you lose it, regenerate it from **Web UI → Settings → Security & Access → Access Token → Regenerate** after logging in — but you need the original token to log in the first time. As a last resort, stop the container, delete the `config` table row with key `admin_token` from the SQLite database, and restart; a fresh token will be printed again.
+4. **Copy and save this token.** It is only printed once. If you lose it:
+   - **If you can still log in** (e.g. using another session): regenerate it from **Web UI → Settings → Security & Access → Access Token → Regenerate**.
+   - **If you are locked out**: stop the container, delete the `admin_token` row from the `config` table in the SQLite database (located in your AppData `/data` volume), then restart the container — a fresh token will be printed to the log on the next startup.
 
 ### Step 5 — Open the Web UI
 
