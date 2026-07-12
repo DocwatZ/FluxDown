@@ -76,7 +76,80 @@ Then install **FluxDown** from the store. Store source: [zerx-lab/casaos-appstor
 
 ## Unraid
 
-An Unraid Community Applications template is available in [zerx-lab/unraid-templates](https://github.com/zerx-lab/unraid-templates). The Web UI is served at `http://[SERVER-IP]:17800/`.
+FluxDown is available in Unraid's **Community Applications** (CA) plugin. No manual Docker command needed — CA handles the template, pulls the image, and wires up the paths for you.
+
+### Prerequisites
+
+- Unraid 6.9 or later
+- **Community Applications** plugin installed (Apps tab visible in the Unraid WebUI)
+
+### Step 1 — Find FluxDown in Community Applications
+
+1. In the Unraid WebUI, click the **Apps** tab.
+2. In the search box, type **FluxDown**.
+3. Click the **FluxDown** card (published by *zerx-lab*).
+
+> **Can't find it?** The CA template lives in [zerx-lab/unraid-templates](https://github.com/zerx-lab/unraid-templates). If your CA index hasn't refreshed yet, click **Apps → settings → Force update of all repository lists**, then search again.
+
+### Step 2 — Configure the template
+
+The template fields you'll most likely want to adjust before clicking **Apply**:
+
+| Field | Default | Recommended |
+|---|---|---|
+| **WebUI Port** | `17800` | Keep as-is, or change if `17800` is already in use on your server. |
+| **Data directory** (AppData path) | `/mnt/user/appdata/fluxdown/data` | Keep as-is, or point to your preferred AppData share. This folder holds the database, logs, and the generated admin token — keep it on a persistent path. |
+| **Downloads directory** | `/mnt/user/downloads` | Point to whatever share you want finished files to land in (e.g. `/mnt/user/Downloads`). |
+| **Timezone (`TZ`)** | `Etc/UTC` | Set to your local timezone (e.g. `America/New_York`, `Europe/London`, `Asia/Shanghai`). |
+
+All other fields can stay at their defaults for a first install.
+
+### Step 3 — Apply and let it pull
+
+Click **Apply**. Unraid pulls the image (`ghcr.io/zerx-lab/fluxdown-server:latest`) and starts the container. This may take a minute on first run depending on your internet speed.
+
+### Step 4 — Grab the admin token
+
+The very first time the container starts, it generates a one-time admin token and prints it to the container log. Retrieve it before you close the Unraid UI:
+
+1. In the Unraid WebUI, go to **Docker** tab.
+2. Click the FluxDown container row to expand it, then click **Logs** (or use the terminal icon).
+3. Look for a banner that contains your token:
+
+   ```
+   ==============================================================
+     FluxDown Server first run — admin token generated:
+       fxd_1a2b3c4d5e6f7890a1b2c3d4e5f67890
+     Use it to sign in to the Web UI and the management API.
+   ==============================================================
+   ```
+
+   Or grab it with a one-liner in the Unraid terminal:
+
+   ```bash
+   docker logs fluxdown-server 2>&1 | grep -i token
+   ```
+
+4. **Copy and save this token.** It is only printed once. If you lose it, regenerate it from **Web UI → Settings → Security & Access → Access Token → Regenerate** after logging in — but you need the original token to log in the first time. As a last resort, stop the container, delete the `config` table row with key `admin_token` from the SQLite database, and restart; a fresh token will be printed again.
+
+### Step 5 — Open the Web UI
+
+Navigate to:
+
+```
+http://[UNRAID-SERVER-IP]:17800
+```
+
+Enter the token from Step 4 on the login screen. You're in — create your first download task from **+ New Download** in the top bar.
+
+### Updating FluxDown on Unraid
+
+When a new version is released, update via the **Docker** tab the same way you update any other container:
+
+- **Manual** — Click the container row → **Force Update** (or the update arrow if CA shows a badge).
+- **Auto-updates** — Enable in **Docker** tab settings if you prefer hands-off upgrades.
+
+The `/data` volume is separate from the image, so your tasks, settings, and token survive the update.
 
 ## Exposing it safely
 
