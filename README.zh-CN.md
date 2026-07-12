@@ -69,17 +69,21 @@
 | **macOS**（Intel / Apple Silicon） | `.dmg` · 便携版 `.tar.gz` |
 | **Linux**（x64） | `.AppImage` · `.deb` · Arch `.pkg.tar.zst` · 便携版 `.tar.gz` |
 
-### Unraid（社区应用商店）
+### Unraid
 
-FluxDown 已上架 Unraid Community Applications（CA）插件，无需手动输入 Docker 命令。
+此 fork 尚未上架 Unraid Community Applications（CA）插件。请通过 Unraid WebUI 的 **Docker** 标签页手动安装：
 
-1. **Apps 标签页 → 搜索 "FluxDown"** → 点击 FluxDown 卡片（发布者 *zerx-lab*）。
-2. 按需调整路径：**数据目录**（AppData）和**下载目录**，然后点击 **Apply**。
-3. 容器启动后，从日志中获取一次性管理员 Token：
+1. 在 Unraid WebUI 中，进入 **Docker** 标签页 → **Add Container**。
+2. 将 **Repository** 设为 `ghcr.io/docwatz/fluxdown-server:latest`，**Name** 设为 `fluxdown-server`。
+3. 添加端口映射：宿主机 `17800` → 容器 `17800`。
+4. 添加两个路径映射：
+   - `/mnt/user/appdata/fluxdown/data` → `/data`（数据库、日志和管理 token）
+   - `/mnt/user/downloads` → `/root/Downloads`（默认下载目录）
+5. 点击 **Apply**。容器启动后获取一次性管理 token：
    ```shell
    docker logs fluxdown-server 2>&1 | grep -i token
    ```
-4. 打开 `http://[服务器IP]:17800`，使用 Token 登录。
+6. 打开 `http://[服务器IP]:17800`，使用 token 登录。
 
 > **完整步骤指南** → [文档：Docker & NAS — Unraid](https://fluxdown.zerx.dev/docs/en/headless-server/docker/#unraid)
 

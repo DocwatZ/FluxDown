@@ -69,17 +69,21 @@ Grab the latest build from [**GitHub Releases**](https://github.com/zerx-lab/Flu
 | **macOS** (Intel / Apple Silicon) | `.dmg` · portable `.tar.gz` |
 | **Linux** (x64) | `.AppImage` · `.deb` · Arch `.pkg.tar.zst` · portable `.tar.gz` |
 
-### Unraid (Community Applications)
+### Unraid
 
-FluxDown is available in the Unraid Community Applications (CA) plugin — no Docker commands needed.
+This fork is not yet available in Unraid's Community Applications (CA) plugin. Install it manually via the **Docker** tab:
 
-1. **Apps tab → search "FluxDown"** → click the FluxDown card (by *zerx-lab*).
-2. Adjust paths if needed: **Data directory** (AppData) and **Downloads directory**, then click **Apply**.
-3. After the container starts, grab your one-time admin token from the container logs:
+1. In the Unraid WebUI, go to **Docker** tab → **Add Container**.
+2. Set **Repository** to `ghcr.io/docwatz/fluxdown-server:latest` and **Name** to `fluxdown-server`.
+3. Add a port mapping: host `17800` → container `17800`.
+4. Add two path mappings:
+   - `/mnt/user/appdata/fluxdown/data` → `/data` (database, logs, and admin token)
+   - `/mnt/user/downloads` → `/root/Downloads` (default download directory)
+5. Click **Apply**. After the container starts, grab your one-time admin token:
    ```shell
    docker logs fluxdown-server 2>&1 | grep -i token
    ```
-4. Open `http://[SERVER-IP]:17800` and sign in with the token.
+6. Open `http://[SERVER-IP]:17800` and sign in with the token.
 
 > **Full step-by-step guide** → [Docs: Docker & NAS — Unraid](https://fluxdown.zerx.dev/docs/en/headless-server/docker/#unraid)
 
