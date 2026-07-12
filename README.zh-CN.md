@@ -69,6 +69,20 @@
 | **macOS**（Intel / Apple Silicon） | `.dmg` · 便携版 `.tar.gz` |
 | **Linux**（x64） | `.AppImage` · `.deb` · Arch `.pkg.tar.zst` · 便携版 `.tar.gz` |
 
+### Unraid（社区应用商店）
+
+FluxDown 已上架 Unraid Community Applications（CA）插件，无需手动输入 Docker 命令。
+
+1. **Apps 标签页 → 搜索 "FluxDown"** → 点击 FluxDown 卡片（发布者 *zerx-lab*）。
+2. 按需调整路径：**数据目录**（AppData）和**下载目录**，然后点击 **Apply**。
+3. 容器启动后，从日志中获取一次性管理员 Token：
+   ```shell
+   docker logs fluxdown-server 2>&1 | grep -i token
+   ```
+4. 打开 `http://[服务器IP]:17800`，使用 Token 登录。
+
+> **完整步骤指南** → [文档：Docker & NAS — Unraid](https://fluxdown.zerx.dev/docs/en/headless-server/docker/#unraid)
+
 ### 浏览器扩展
 
 安装扩展后，FluxDown 会自动接管浏览器下载：

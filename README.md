@@ -69,6 +69,20 @@ Grab the latest build from [**GitHub Releases**](https://github.com/zerx-lab/Flu
 | **macOS** (Intel / Apple Silicon) | `.dmg` · portable `.tar.gz` |
 | **Linux** (x64) | `.AppImage` · `.deb` · Arch `.pkg.tar.zst` · portable `.tar.gz` |
 
+### Unraid (Community Applications)
+
+FluxDown is available in the Unraid Community Applications (CA) plugin — no Docker commands needed.
+
+1. **Apps tab → search "FluxDown"** → click the FluxDown card (by *zerx-lab*).
+2. Adjust paths if needed: **Data directory** (AppData) and **Downloads directory**, then click **Apply**.
+3. After the container starts, grab your one-time admin token from the container logs:
+   ```shell
+   docker logs fluxdown-server 2>&1 | grep -i token
+   ```
+4. Open `http://[SERVER-IP]:17800` and sign in with the token.
+
+> **Full step-by-step guide** → [Docs: Docker & NAS — Unraid](https://fluxdown.zerx.dev/docs/en/headless-server/docker/#unraid)
+
 ### Browser Extension
 
 Install the extension so FluxDown takes over browser downloads automatically:

@@ -11,6 +11,7 @@ import type {
   FsListResponse,
   PingInfo,
   ProxyTestRequest,
+  HealthReport,
   ProxyTestResponse,
   QueueDto,
   StatsResponse,
@@ -107,6 +108,7 @@ export const api = {
   regenerateToken: () =>
     apiFetch<TokenResponse>('/api/v1/token/regenerate', { method: 'POST' }),
   stats: () => apiFetch<StatsResponse>('/api/v1/stats'),
+  health: () => apiFetch<HealthReport>('/api/v1/health'),
 }
 
 /** 「保存到本地」下载地址（浏览器导航下载，token 走查询参数）。 */

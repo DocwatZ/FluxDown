@@ -30,13 +30,17 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use chrono::Local;
 
 static LOGGER: OnceLock<AppLogger> = OnceLock::new();
+
+/// Whether debug-level logging is enabled. Off by default; toggled live via
+/// [`set_debug_enabled`].
+static DEBUG_LOGGING: AtomicBool = AtomicBool::new(false);
 
 /// 日志保留天数
 const LOG_RETENTION_DAYS: u64 = 7;
@@ -357,6 +361,18 @@ pub fn set_max_total_bytes(bytes: u64) {
     logger.enforce_total_size(&state);
 }
 
+/// Returns whether debug-level logging is currently enabled.
+#[inline]
+pub fn is_debug_enabled() -> bool {
+    DEBUG_LOGGING.load(Ordering::Relaxed)
+}
+
+/// Enable or disable debug-level logging at runtime.
+/// When disabled (the default), `log_debug!` calls are near-zero cost.
+pub fn set_debug_enabled(enabled: bool) {
+    DEBUG_LOGGING.store(enabled, Ordering::Relaxed);
+}
+
 /// 写入一条日志（缓冲写入，由 OS 按需刷盘）。
 #[inline]
 pub fn write(message: &str) {
@@ -424,6 +440,23 @@ macro_rules! log_error {
     };
 }
 
+/// 记录调试日志（仅 `log_level=debug` 时写入），格式同 `format!()`。
+/// 生产部署中 debug 模式关闭时，此宏几乎零开销（仅读一个原子布尔）。
+///
+/// ```ignore
+/// log_debug!("[downloader] raw response headers: {:?}", headers);
+/// ```
+#[macro_export]
+macro_rules! log_debug {
+    ($($arg:tt)*) => {
+        if $crate::logger::is_debug_enabled() {
+            $crate::logger::write(&format!($($arg)*))
+        }
+    };
+}
+
+#[allow(unused_imports)]
+pub use crate::log_debug;
 #[allow(unused_imports)]
 pub use crate::log_error;
 #[allow(unused_imports)]

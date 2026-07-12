@@ -1,5 +1,6 @@
 // 单条任务行。对齐 design/web/app.js taskRow()/statusMeta()/actionBtn()/iconClass()。
 
+import { memo, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Archive, Check, FileText, Image as ImageIcon, Pause, Play, RotateCcw, Film, Music, File as FileIcon, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -123,11 +124,11 @@ function TaskActionButton({ t, onPause, onContinue }: { t: ViewTask; onPause: ()
   )
 }
 
-export function TaskRow({ task: t, queues }: { task: ViewTask; queues: QueueDto[] }) {
+export const TaskRow = memo(function TaskRow({ task: t, queues }: { task: ViewTask; queues: QueueDto[] }) {
   const { selectTask, currentTaskId, selected, setSelected } = useTasksUi()
   const priority = useStore(priorityStore)
   const qc = useQueryClient()
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] })
+  const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: ['tasks'] }), [qc])
 
   const pauseMut = useMutation({ mutationFn: () => api.pauseTask(t.taskId), onSuccess: invalidate })
   const continueMut = useMutation({ mutationFn: () => api.continueTask(t.taskId), onSuccess: invalidate })
@@ -149,6 +150,14 @@ export function TaskRow({ task: t, queues }: { task: ViewTask; queues: QueueDto[
     })
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Enter') {
+      selectTask(t.taskId)
+    } else if (e.key === 'Delete') {
+      deleteMut.mutate(false)
+    }
+  }
+
   return (
     <TaskContextMenu
       task={t}
@@ -160,7 +169,14 @@ export function TaskRow({ task: t, queues }: { task: ViewTask; queues: QueueDto[
       onDelete={(deleteFiles) => deleteMut.mutate(deleteFiles)}
       onMove={(queueId) => moveMut.mutate(queueId)}
     >
-      <div className={cn('task-row', currentTaskId === t.taskId && 'selected')} onClick={() => selectTask(t.taskId)}>
+      <div
+        className={cn('task-row', currentTaskId === t.taskId && 'selected')}
+        onClick={() => selectTask(t.taskId)}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="row"
+        aria-label={t.fileName || t.url}
+      >
         <label className="mcheck trow-check" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={selected.has(t.taskId)} onChange={(e) => toggleSelected(e.target.checked)} />
           <i />
@@ -182,7 +198,14 @@ export function TaskRow({ task: t, queues }: { task: ViewTask; queues: QueueDto[
           <div className="trow-meta">
             <TaskMeta t={t} />
           </div>
-          <div className={cn('trow-bar', cls)}>
+          <div
+            className={cn('trow-bar', cls)}
+            role="progressbar"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${t.fileName || t.url} ${pct}%`}
+          >
             <i style={{ width: `${pct}%` }} />
           </div>
         </div>
@@ -193,4 +216,17 @@ export function TaskRow({ task: t, queues }: { task: ViewTask; queues: QueueDto[
       </div>
     </TaskContextMenu>
   )
-}
+}, (prev, next) => {
+  // Custom comparator: only re-render when task-visible fields change.
+  return (
+    prev.task.taskId === next.task.taskId &&
+    prev.task.status === next.task.status &&
+    prev.task.downloadedBytes === next.task.downloadedBytes &&
+    prev.task.totalBytes === next.task.totalBytes &&
+    prev.task.speed === next.task.speed &&
+    prev.task.errorMessage === next.task.errorMessage &&
+    prev.task.fileName === next.task.fileName &&
+    prev.task.url === next.task.url &&
+    prev.queues === next.queues
+  )
+})
