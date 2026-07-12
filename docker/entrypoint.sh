@@ -35,6 +35,8 @@ chown -R fluxdown:fluxdown "${FLUXDOWN_DATA_DIR:-/data}"
 # If a custom download directory is specified, create and chown it too.
 if [ -n "${FLUXDOWN_DOWNLOAD_DIR}" ]; then
     mkdir -p "${FLUXDOWN_DOWNLOAD_DIR}"
+    # Only chown the directory itself, not its contents (-R would be expensive
+    # on large download libraries and is generally undesirable for host mounts).
     if ! chown fluxdown:fluxdown "${FLUXDOWN_DOWNLOAD_DIR}" 2>/dev/null; then
         echo "Warning: could not set ownership of ${FLUXDOWN_DOWNLOAD_DIR} — downloads may fail if the directory is not writable by PUID=${PUID}" >&2
     fi
