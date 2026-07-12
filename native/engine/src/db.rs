@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS queues (
     default_user_agent TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_task_segments_task_id ON task_segments(task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE TABLE IF NOT EXISTS ed2k_blocks (
     task_id TEXT NOT NULL,
     block_index INTEGER NOT NULL,
@@ -173,6 +175,8 @@ CREATE TABLE IF NOT EXISTS queues (
     default_user_agent TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_task_segments_task_id ON task_segments(task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE TABLE IF NOT EXISTS ed2k_blocks (
     task_id TEXT NOT NULL,
     block_index BIGINT NOT NULL,

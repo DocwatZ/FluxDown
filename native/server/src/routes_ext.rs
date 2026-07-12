@@ -34,8 +34,9 @@ use utoipa::OpenApi;
 use crate::actor::ActorCmd;
 use crate::config::default_save_dir;
 use crate::wire::{
-    CreateQueueRequest, FsEntry, FsListResponse, MoveQueueRequest, ProxyTestRequest,
-    ProxyTestResponse, StatsResponse, TokenResponse, UpdateQueueRequest, WsClientMsg, WsServerMsg,
+    CreateQueueRequest, FsEntry, FsListResponse, HealthCheck, HealthReport, MoveQueueRequest,
+    ProxyTestRequest, ProxyTestResponse, StatsResponse, TokenResponse, UpdateQueueRequest,
+    WsClientMsg, WsServerMsg,
 };
 use crate::ws_hub::WsHub;
 
@@ -51,6 +52,8 @@ pub struct ServerState {
     pub version: String,
     /// 演示模式：`Some(url)` 时仅允许下载该 URL（`FLUXDOWN_DEMO_URL`）。
     pub demo_url: Option<String>,
+    /// `GET /api/v1/health` 响应缓存（30 秒 TTL）。
+    pub health_cache: Arc<tokio::sync::RwLock<Option<(HealthReport, std::time::Instant)>>>,
 }
 
 impl ServerState {
@@ -97,6 +100,7 @@ pub fn extra_router(state: ServerState) -> Router {
         .route(paths::PROXY_TEST, post(proxy_test))
         .route(paths::TOKEN_REGENERATE, post(token_regenerate))
         .route(paths::STATS, get(stats))
+        .route(paths::HEALTH, get(health))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     let open = Router::new()
@@ -121,6 +125,7 @@ pub mod paths {
     pub const PROXY_TEST: &str = "/api/v1/proxy/test";
     pub const TOKEN_REGENERATE: &str = "/api/v1/token/regenerate";
     pub const STATS: &str = "/api/v1/stats";
+    pub const HEALTH: &str = "/api/v1/health";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     pub const DOCS: &str = "/api/v1/docs";
 }
@@ -440,8 +445,23 @@ async fn task_file(
     if task.status != 3 {
         return error_response(StatusCode::BAD_REQUEST, "task is not completed");
     }
-    let path = PathBuf::from(&task.save_dir).join(&task.file_name);
-    let file = match tokio::fs::File::open(&path).await {
+    let raw_path = PathBuf::from(&task.save_dir).join(&task.file_name);
+    // Guard against path traversal: canonicalize the file path and verify it
+    // stays within the recorded save directory.
+    let canon_dir = match std::fs::canonicalize(&task.save_dir) {
+        Ok(p) => p,
+        Err(_) => {
+            return error_response(StatusCode::NOT_FOUND, "save directory not found on disk")
+        }
+    };
+    let canon_path = match std::fs::canonicalize(&raw_path) {
+        Ok(p) => p,
+        Err(_) => return error_response(StatusCode::NOT_FOUND, "file not found on disk"),
+    };
+    if !canon_path.starts_with(&canon_dir) {
+        return error_response(StatusCode::FORBIDDEN, "file path escapes save directory");
+    }
+    let file = match tokio::fs::File::open(&canon_path).await {
         Ok(f) => f,
         Err(_) => return error_response(StatusCode::NOT_FOUND, "file not found on disk"),
     };
@@ -631,6 +651,240 @@ async fn stats(State(state): State<ServerState>) -> Result<Response, ApiError> {
     .into_response())
 }
 
+/// 健康仪表盘（DB 连通、磁盘空间、下载目录可写、互联网访问、DNS、WS 服务）。
+/// 结果缓存 30 秒，避免频繁页面刷新触发大量系统调用。
+#[utoipa::path(get, path = "/api/v1/health", tag = "server",
+    responses((status = 200, body = HealthReport)),
+    security(("bearer_token" = []), ("api_key" = []))
+)]
+async fn health(State(state): State<ServerState>) -> Result<Response, ApiError> {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(30);
+
+    // Fast path: return cached result if within TTL.
+    {
+        let cache = state.health_cache.read().await;
+        if let Some((ref report, ts)) = *cache
+            && ts.elapsed() < TTL
+        {
+            return Ok(axum::Json(report.clone()).into_response());
+        }
+    }
+
+    // Slow path: run checks and update cache.
+    let mut checks: Vec<HealthCheck> = Vec::new();
+
+    // 1. Database connectivity
+    checks.push(check_database(&state.db).await);
+
+    // 2. Disk space
+    {
+        let save_dir = state.current_save_dir().await;
+        checks.push(check_disk(&save_dir));
+    }
+
+    // 3. Download directory writable
+    {
+        let save_dir = state.current_save_dir().await;
+        checks.push(check_dir_writable(&save_dir));
+    }
+
+    // 4. Internet connectivity (TCP connect to 8.8.8.8:443, 5s timeout)
+    checks.push(check_internet().await);
+
+    // 5. DNS resolution
+    checks.push(check_dns().await);
+
+    // 6. WebSocket service
+    checks.push(check_websocket(&state));
+
+    // Compute overall status.
+    let overall = if checks.iter().any(|c| c.status == "error") {
+        "error"
+    } else if checks.iter().any(|c| c.status == "warn") {
+        "warn"
+    } else {
+        "ok"
+    }
+    .to_string();
+
+    let report = HealthReport {
+        overall,
+        checks,
+        checked_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0),
+    };
+
+    // Update cache.
+    {
+        let mut cache = state.health_cache.write().await;
+        *cache = Some((report.clone(), std::time::Instant::now()));
+    }
+
+    Ok(axum::Json(report).into_response())
+}
+
+// ---------------------------------------------------------------------------
+// Health sub-checks
+// ---------------------------------------------------------------------------
+
+async fn check_database(db: &Db) -> HealthCheck {
+    // Use a lightweight config read as the liveness probe.
+    match db.get_config("local_server_api_enabled").await {
+        Ok(_) => HealthCheck {
+            name: "database".into(),
+            status: "ok".into(),
+            message: None,
+            suggestion: None,
+        },
+        Err(e) => HealthCheck {
+            name: "database".into(),
+            status: "error".into(),
+            message: Some(format!("database query failed: {e}")),
+            suggestion: Some("check the data directory and database file permissions".into()),
+        },
+    }
+}
+
+fn check_disk(save_dir: &str) -> HealthCheck {
+    const WARN_THRESHOLD: u64 = 1024 * 1024 * 1024; // 1 GiB
+    const ERROR_THRESHOLD: u64 = 100 * 1024 * 1024; // 100 MiB
+    match fs2::available_space(FsPath::new(save_dir)) {
+        Ok(free) if free < ERROR_THRESHOLD => HealthCheck {
+            name: "disk".into(),
+            status: "error".into(),
+            message: Some(format!(
+                "only {} MiB free — downloads will fail",
+                free / (1024 * 1024)
+            )),
+            suggestion: Some("free up disk space or change the download directory".into()),
+        },
+        Ok(free) if free < WARN_THRESHOLD => HealthCheck {
+            name: "disk".into(),
+            status: "warn".into(),
+            message: Some(format!(
+                "{} MiB free (less than 1 GiB)",
+                free / (1024 * 1024)
+            )),
+            suggestion: Some("consider freeing up disk space".into()),
+        },
+        Ok(_) => HealthCheck {
+            name: "disk".into(),
+            status: "ok".into(),
+            message: None,
+            suggestion: None,
+        },
+        Err(e) => HealthCheck {
+            name: "disk".into(),
+            status: "warn".into(),
+            message: Some(format!("could not read disk space: {e}")),
+            suggestion: Some("check that the download directory exists".into()),
+        },
+    }
+}
+
+fn check_dir_writable(save_dir: &str) -> HealthCheck {
+    let probe = FsPath::new(save_dir).join(".fluxdown-healthcheck");
+    let writable = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&probe)
+        .is_ok();
+    let _ = std::fs::remove_file(&probe);
+    if writable {
+        HealthCheck {
+            name: "download_dir".into(),
+            status: "ok".into(),
+            message: None,
+            suggestion: None,
+        }
+    } else {
+        HealthCheck {
+            name: "download_dir".into(),
+            status: "error".into(),
+            message: Some(format!("download directory is not writable: {save_dir}")),
+            suggestion: Some(
+                "check PUID/PGID env vars and volume mount permissions (Docker/Unraid)".into(),
+            ),
+        }
+    }
+}
+
+async fn check_internet() -> HealthCheck {
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+    let result = timeout(
+        std::time::Duration::from_secs(5),
+        TcpStream::connect("8.8.8.8:443"),
+    )
+    .await;
+    match result {
+        Ok(Ok(_)) => HealthCheck {
+            name: "internet".into(),
+            status: "ok".into(),
+            message: None,
+            suggestion: None,
+        },
+        Ok(Err(e)) => HealthCheck {
+            name: "internet".into(),
+            status: "warn".into(),
+            message: Some(format!("TCP connect to 8.8.8.8:443 failed: {e}")),
+            suggestion: Some(
+                "check network settings and firewall rules; VPN may be blocking outbound traffic"
+                    .into(),
+            ),
+        },
+        Err(_) => HealthCheck {
+            name: "internet".into(),
+            status: "warn".into(),
+            message: Some("internet connectivity check timed out (5s)".into()),
+            suggestion: Some("check network settings and proxy configuration".into()),
+        },
+    }
+}
+
+async fn check_dns() -> HealthCheck {
+    use tokio::net::lookup_host;
+    use tokio::time::timeout;
+    let result = timeout(
+        std::time::Duration::from_secs(5),
+        lookup_host("fluxdown.zerx.dev:443"),
+    )
+    .await;
+    match result {
+        Ok(Ok(_)) => HealthCheck {
+            name: "dns".into(),
+            status: "ok".into(),
+            message: None,
+            suggestion: None,
+        },
+        Ok(Err(e)) => HealthCheck {
+            name: "dns".into(),
+            status: "warn".into(),
+            message: Some(format!("DNS resolution failed: {e}")),
+            suggestion: Some("check DNS server settings; a VPN may be affecting DNS".into()),
+        },
+        Err(_) => HealthCheck {
+            name: "dns".into(),
+            status: "warn".into(),
+            message: Some("DNS resolution timed out (5s)".into()),
+            suggestion: Some("check DNS server configuration".into()),
+        },
+    }
+}
+
+fn check_websocket(state: &ServerState) -> HealthCheck {
+    let clients = state.hub.events.receiver_count();
+    HealthCheck {
+        name: "websocket".into(),
+        status: "ok".into(),
+        message: Some(format!("{clients} client(s) connected")),
+        suggestion: None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // OpenAPI（核心 + 扩展合并）与 Scalar 文档
 // ---------------------------------------------------------------------------
@@ -658,6 +912,7 @@ async fn stats(State(state): State<ServerState>) -> Result<Response, ApiError> {
         proxy_test,
         token_regenerate,
         stats,
+        health,
     ),
     components(schemas(
         crate::wire::WsServerMsg,
@@ -674,6 +929,8 @@ async fn stats(State(state): State<ServerState>) -> Result<Response, ApiError> {
         crate::wire::FsListResponse,
         crate::wire::StatsResponse,
         crate::wire::TokenResponse,
+        crate::wire::HealthCheck,
+        crate::wire::HealthReport,
     )),
     tags((name = "server", description = "headless 服务器扩展端点"))
 )]

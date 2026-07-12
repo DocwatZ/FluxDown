@@ -292,6 +292,38 @@ pub struct TokenResponse {
     pub note: String,
 }
 
+// ---------------------------------------------------------------------------
+// Health dashboard
+// ---------------------------------------------------------------------------
+
+/// 单个子系统健康检查结果。
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthCheck {
+    /// 子系统名称（如 `"database"`, `"disk"`, `"internet"`）。
+    pub name: String,
+    /// `"ok"` / `"warn"` / `"error"`
+    pub status: String,
+    /// 问题描述（`status != "ok"` 时填写）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// 修复建议。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+}
+
+/// `GET /api/v1/health` 响应体。
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthReport {
+    /// 综合状态：`"ok"` / `"warn"` / `"error"`（各子系统最高等级）。
+    pub overall: String,
+    /// 各子系统检查结果列表。
+    pub checks: Vec<HealthCheck>,
+    /// 本次检查的 Unix 时间戳（秒）。
+    pub checked_at: i64,
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {

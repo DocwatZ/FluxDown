@@ -36,6 +36,12 @@ pub struct ServerConfig {
     /// Useful for Docker/Unraid deployments where the download share is mounted
     /// at a well-known path (e.g. `/downloads`).
     pub download_dir: Option<String>,
+    /// Pre-seed the management token (`FLUXDOWN_TOKEN`).
+    /// When set on first run, this value is stored as the management token
+    /// instead of generating a random one.  If a token already exists in the
+    /// database, this value is **ignored** (never overwrites).
+    /// Useful for reproducible deployments (Kubernetes secrets, Docker secrets).
+    pub token_seed: Option<String>,
 }
 
 impl ServerConfig {
@@ -66,6 +72,9 @@ impl ServerConfig {
         let download_dir = std::env::var("FLUXDOWN_DOWNLOAD_DIR")
             .ok()
             .filter(|s| !s.trim().is_empty());
+        let token_seed = std::env::var("FLUXDOWN_TOKEN")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         Self {
             bind,
             data_dir_override,
@@ -74,6 +83,7 @@ impl ServerConfig {
             demo_url,
             language,
             download_dir,
+            token_seed,
         }
     }
 }
@@ -160,9 +170,16 @@ pub fn default_save_dir() -> String {
 
 /// 首次运行初始化：强制开启管理 API；token 为空则生成并持久化。
 ///
+/// `token_seed` 来自 `FLUXDOWN_TOKEN` 环境变量：仅在数据库中**尚无 token** 时
+/// 生效（绝不覆盖已存在的值），用于可重现部署（Kubernetes secrets / Docker secrets）。
+/// 日志中仅打印前 8 字符以避免泄露。
+///
 /// 返回生效的管理 token。新生成的 token 会打印到 stderr（headless 部署
 /// 唯一一次可见的机会）。
-pub async fn ensure_server_config(db: &Db) -> Result<String, fluxdown_engine::db::DbError> {
+pub async fn ensure_server_config(
+    db: &Db,
+    token_seed: Option<&str>,
+) -> Result<String, fluxdown_engine::db::DbError> {
     // headless 服务器的存在意义就是远程管理——管理 API 恒开。
     db.set_config("local_server_api_enabled", "true").await?;
 
@@ -178,18 +195,33 @@ pub async fn ensure_server_config(db: &Db) -> Result<String, fluxdown_engine::db
     if !token.is_empty() {
         return Ok(token);
     }
-    let token = format!("fxd_{}", uuid::Uuid::new_v4().simple());
+    // No token in DB yet: use seed from FLUXDOWN_TOKEN env var, or generate one.
+    let (token, is_seeded) = if let Some(seed) = token_seed.filter(|s| !s.trim().is_empty()) {
+        (seed.to_string(), true)
+    } else {
+        (format!("fxd_{}", uuid::Uuid::new_v4().simple()), false)
+    };
     db.set_config("local_server_token", &token).await?;
-    log_info!("[server] generated management token: {}", token);
-    eprintln!("==============================================================");
-    eprintln!("  FluxDown Server — first run, management token generated:");
-    eprintln!("    {token}");
-    eprintln!("  Use this token to log in to the Web UI or call the");
-    eprintln!("  management API (Authorization: Bearer YOUR_TOKEN).");
-    eprintln!("  The token is stored in the data directory (config table).");
-    eprintln!("  To regenerate: delete the 'local_server_token' row from");
-    eprintln!("  the config table and restart the server.");
-    eprintln!("==============================================================");
+    // Log only first 8 chars to avoid the full token appearing in log files.
+    let masked = format!("{}…", &token[..token.len().min(8)]);
+    if is_seeded {
+        log_info!("[server] management token set from FLUXDOWN_TOKEN env var ({})", masked);
+        eprintln!("==============================================================");
+        eprintln!("  FluxDown Server — management token seeded from FLUXDOWN_TOKEN.");
+        eprintln!("  The token is stored in the data directory (config table).");
+        eprintln!("==============================================================");
+    } else {
+        log_info!("[server] generated management token: {}", masked);
+        eprintln!("==============================================================");
+        eprintln!("  FluxDown Server — first run, management token generated:");
+        eprintln!("    {token}");
+        eprintln!("  Use this token to log in to the Web UI or call the");
+        eprintln!("  management API (Authorization: ******");
+        eprintln!("  The token is stored in the data directory (config table).");
+        eprintln!("  To regenerate: delete the 'local_server_token' row from");
+        eprintln!("  the config table and restart the server.");
+        eprintln!("==============================================================");
+    }
     Ok(token)
 }
 

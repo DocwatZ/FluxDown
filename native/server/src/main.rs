@@ -11,6 +11,7 @@ mod config;
 mod demo;
 mod host;
 mod routes_ext;
+mod startup;
 mod wire;
 mod ws_hub;
 
@@ -79,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(default_save_dir);
     boot_db.init_default_config(&seed_save_dir).await?;
-    let token = ensure_server_config(&boot_db).await?;
+    let token = ensure_server_config(&boot_db, server_cfg.token_seed.as_deref()).await?;
 
     // FLUXDOWN_LANG is a deployment-level language fallback — not persisted to DB.
     // Settings-page saved value always takes precedence (ServerApiHost::web_language
@@ -212,10 +213,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         token,
         version: SERVER_VERSION.to_string(),
         demo_url: server_cfg.demo_url.clone(),
+        health_cache: Arc::new(tokio::sync::RwLock::new(None)),
     };
     let spa = ServeDir::new(&server_cfg.webroot)
         .fallback(ServeFile::new(server_cfg.webroot.join("index.html")));
-    let mut app: Router = api_router(host, api_cfg).merge(extra_router(state));
+    let mut app: Router = api_router(host, api_cfg).merge(extra_router(state.clone()));
     if server_cfg.demo_url.is_some() {
         // 内置演示下载源（无鉴权，生成字节流）；仅演示模式挂载。
         app = app.merge(demo::demo_router());
@@ -223,16 +225,58 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = app.fallback_service(spa);
 
     let listener = tokio::net::TcpListener::bind(&server_cfg.bind).await?;
-    log_info!("[server] listening on {}", server_cfg.bind);
-    eprintln!("FluxDown Server listening on http://{}", server_cfg.bind);
-    eprintln!("  Web UI:    http://{}/", server_cfg.bind);
-    eprintln!("  API docs:  http://{}/api/v1/docs", server_cfg.bind);
+
+    // Print the structured startup banner (also writes to log file).
+    startup::print_startup_banner(
+        SERVER_VERSION,
+        &server_cfg.bind,
+        &data_dir,
+        &save_dir,
+        &state.token,
+    );
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-            log_info!("[server] ctrl-c received, shutting down");
-        })
+        .with_graceful_shutdown(shutdown_signal(state.cmd_tx.clone()))
         .await?;
     Ok(())
+}
+
+/// Resolves when either Ctrl-C (SIGINT) **or** SIGTERM is received.
+///
+/// On SIGTERM (sent by `docker stop`) we additionally send `ActorCmd::PauseAll`
+/// to flush in-progress download state before the process exits, giving the
+/// engine a clean shutdown window.  A 10-second hard timeout prevents the
+/// process from hanging indefinitely.
+async fn shutdown_signal(cmd_tx: mpsc::Sender<ActorCmd>) {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let sigterm = async {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut stream) => { stream.recv().await; }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+
+    #[cfg(not(unix))]
+    let sigterm = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c   => { log_info!("[server] SIGINT received, shutting down"); }
+        _ = sigterm  => { log_info!("[server] SIGTERM received, shutting down"); }
+    }
+
+    // Ask the download actor to pause all in-flight tasks so state is saved.
+    let (ack_tx, ack_rx) = tokio::sync::oneshot::channel();
+    let sent = cmd_tx
+        .send(ActorCmd::PauseAll { ack: ack_tx })
+        .await
+        .is_ok();
+    if sent {
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(10), ack_rx).await;
+        log_info!("[server] in-flight downloads paused, exiting");
+    }
 }
