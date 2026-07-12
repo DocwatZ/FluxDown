@@ -153,6 +153,100 @@ When a new version is released, update via the **Docker** tab the same way you u
 
 The `/data` volume is separate from the image, so your tasks, settings, and token survive the update.
 
+
+## Podman
+
+Podman is a drop-in Docker alternative that runs without a daemon.  Replace every `docker` command with `podman`; the image, flags, and volume paths are identical.
+
+One important difference: Podman's rootless mode maps the host user to UID 0 **inside** the container by default, which can cause PUID/PGID mismatch.  Add `--userns=keep-id` so that your host user's UID/GID are preserved inside the container:
+
+```bash
+podman run -d \
+  --name fluxdown-server \
+  --userns=keep-id \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -e FLUXDOWN_DOWNLOAD_DIR=/downloads \
+  -v /path/to/data:/data \
+  -v /path/to/downloads:/downloads \
+  -p 17800:17800 \
+  ghcr.io/docwatz/fluxdown-server:latest
+```
+
+For a systemd quadlet (rootless, auto-start on login):
+
+```ini
+# ~/.config/containers/systemd/fluxdown.container
+[Unit]
+Description=FluxDown Server
+
+[Container]
+Image=ghcr.io/docwatz/fluxdown-server:latest
+UserNS=keep-id
+Environment=PUID=1000
+Environment=PGID=1000
+Environment=FLUXDOWN_DOWNLOAD_DIR=/downloads
+Volume=/path/to/data:/data:Z
+Volume=/path/to/downloads:/downloads:Z
+PublishPort=17800:17800
+
+[Install]
+WantedBy=default.target
+```
+
+---
+
+## Synology (Container Manager)
+
+Synology DSM 7.2+ ships **Container Manager**, which replaces Docker for Synology.  Community Applications are not available; use the GUI instead.
+
+1. Open **Container Manager → Registry** and search for **fluxdown-server** (`ghcr.io/docwatz/fluxdown-server`).  Download the `latest` tag.
+2. Go to **Container → Create** and select the downloaded image.
+3. On the **Port Settings** tab, map **Local Port 17800 → Container Port 17800** (TCP).
+4. On the **Volume Settings** tab, add two bindings:
+   - `/volume1/docker/fluxdown/data` → `/data`
+   - `/volume1/docker/fluxdown/downloads` → `/downloads` (or whichever shared folder you want to download into)
+5. On the **Environment** tab, add:
+   | Variable | Value |
+   |---|---|
+   | `PUID` | Your DSM user's UID (find with `id` in SSH) |
+   | `PGID` | Your DSM user's GID |
+   | `FLUXDOWN_DOWNLOAD_DIR` | `/downloads` |
+   | `FLUXDOWN_TOKEN` | *(optional)* pre-set your admin token |
+6. Click **Apply** / **Done**.  The container starts automatically.
+
+> **Permissions:** The `/volume1/docker/fluxdown/data` and `/downloads` folders must be owned by (or at minimum writable by) the UID/GID you set in Step 5.  Use **File Station** or SSH `chown` to fix ownership if the container fails to start.
+
+---
+
+## TrueNAS SCALE
+
+TrueNAS SCALE can run FluxDown either as a **Custom App** (straightforward) or through the **Community Apps catalogue** if a chart is available.
+
+### Custom App (recommended)
+
+1. In the TrueNAS web UI, go to **Apps → Discover Apps → Custom App**.
+2. Set the image to `ghcr.io/docwatz/fluxdown-server` with tag `latest`.
+3. Under **Port Forwarding**, add `17800:17800` (TCP).
+4. Under **Storage**, add two **Host Path** volumes:
+   - `/mnt/pool/fluxdown/data` → `/data`
+   - `/mnt/pool/fluxdown/downloads` → `/downloads`
+5. Under **Environment Variables**, add:
+   | Name | Value |
+   |---|---|
+   | `PUID` | `568` (TrueNAS apps default) or your preferred UID |
+   | `PGID` | `568` |
+   | `FLUXDOWN_DOWNLOAD_DIR` | `/downloads` |
+6. Click **Save**.
+
+> **Dataset permissions:** Create the `data` and `downloads` datasets before deploying and set their owner to UID/GID `568` (or whichever IDs you chose) via **Datasets → Permissions → Edit** → Unix Permissions.
+
+### Community Apps catalogue
+
+If a FluxDown chart is published to the [TrueCharts](https://truecharts.org) or iXsystems community catalogue, install it from **Apps → Discover Apps** by searching for "FluxDown".  The chart pre-configures all the volume mounts and environment variables; just review the defaults and click **Install**.
+
+---
+
 ## Exposing it safely
 
 The image binds `0.0.0.0:17800` inside the container, mapped to the host. As with any headless deployment, the admin token is the only thing guarding full remote control — see the [reverse proxy & TLS guidance](/docs/en/headless-server/setup/) before exposing it beyond a trusted LAN.

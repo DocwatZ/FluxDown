@@ -46,6 +46,8 @@ All configuration is read once at startup from environment variables. There is n
 |---|---|---|
 | `FLUXDOWN_BIND` | `0.0.0.0:17800` | TCP address the HTTP/WebSocket server listens on. |
 | `FLUXDOWN_DATA_DIR` | Platform auto-detected (see below) | Directory holding the database file and logs. |
+| `FLUXDOWN_DOWNLOAD_DIR` | Same as `FLUXDOWN_DATA_DIR` if unset | Default directory where new downloads are saved. Mount a separate volume here so downloads are not mixed with the database. |
+| `FLUXDOWN_TOKEN` | unset — auto-generated on first run | Pre-seed the admin token instead of letting the server generate one. Useful for reproducible deployments (Docker secrets, Kubernetes secrets, Unraid template variables). The value is only used on the very first run; if a token is already stored in the database it is left unchanged. Never appears in log files — only the first 8 characters are printed at startup. |
 | `FLUXDOWN_DATABASE_URL` | unset — uses a SQLite file inside the data dir | Explicit connection string: `sqlite:/path/to/file.db` or `postgres://user:pass@host/db`. |
 | `FLUXDOWN_WEBROOT` | `./web` next to the executable | Directory the Web UI static files (`bun run build` output) are served from; SPA routes fall back to `index.html`. |
 | `FLUXDOWN_DEMO` | unset (off) | Truthy value (`1`/`true`/`yes`/`on`) turns on demo mode: only a built-in, generated 64 MiB file can be downloaded. Useful for public demos. |

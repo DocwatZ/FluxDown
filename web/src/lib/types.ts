@@ -187,3 +187,23 @@ export interface TokenResponse {
 }
 
 export type ConfigMap = Record<string, string>
+
+// ---------------------------------------------------------------------------
+// Health dashboard
+// ---------------------------------------------------------------------------
+
+export interface HealthCheck {
+  name: string
+  /** `"ok"` | `"warn"` | `"error"` */
+  status: string
+  message?: string
+  suggestion?: string
+}
+
+export interface HealthReport {
+  /** `"ok"` | `"warn"` | `"error"` */
+  overall: string
+  checks: HealthCheck[]
+  /** Unix timestamp (seconds) of the last check. */
+  checkedAt: number
+}
